@@ -168,7 +168,7 @@ class PlaylistViewSet(viewsets.ModelViewSet):
                 pos += 1
                 added += 1
         return Response({'added_count': added, 'total': pos}, status=status.HTTP_201_CREATED)
-        
+
     @action(detail=True, methods=['delete'])
     def remove_track(self, request, pk=None):
         """
