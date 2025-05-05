@@ -1,3 +1,10 @@
+Frontend Repo: https://github.com/nurmek51/Playpod-frontend
+Frorntend Demo: https://playpod-frontend.vercel.app/
+
+There are a few flaws here(on the front-end), but I have a version locally with half of the backend attached (if I had a couple more hours, I would have completed it completely). This is discussed in more detail in the video.
+
+Demo Swagger: http://playpod.nurmek.site/swagger/
+
 # PlayPod
 
 PlayPod is a music streaming platform inspired by Spotify, built with Django REST Framework and integrated with the Deezer API. It provides a robust backend for streaming music, managing playlists, and offering personalized recommendations based on user preferences and listening history.
