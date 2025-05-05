@@ -1,0 +1,160 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: playpoddb
+      POSTGRES_USER: playpod
+      POSTGRES_PASSWORD: playpod
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "playpod"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  mc:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      /usr/bin/mc config host add myminio http://minio:9000 minio minio123;
+      /usr/bin/mc mb myminio/media;
+      /usr/bin/mc policy set public myminio/media;
+      exit 0;
+      "
+
+  web:
+    build:
+      context: .
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn PlayPod.wsgi:application --bind 0.0.0.0:8000"
+    volumes:
+      - .:/app:cached
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    env_file: .env
+    environment:
+      - SECRET_KEY=your_secret_key_here
+      - DEBUG=True
+      - ALLOWED_HOSTS=localhost,127.0.0.1,web,nginx
+      - DATABASE_URL=your_database_url_here
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_SSL=False
+      - AWS_ACCESS_KEY_ID=your_aws_access_key_id_here
+      - AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key_here
+      - AWS_STORAGE_BUCKET_NAME=your_bucket_name_here
+      - AWS_S3_REGION_NAME=your_region_here
+      - AWS_QUERYSTRING_AUTH=True
+      - DEEZER_BASE_URL=https://api.deezer.com
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery:
+    build:
+      context: .
+    command: celery -A PlayPod worker -l info
+    volumes:
+      - .:/app:cached
+    env_file: .env
+    environment:
+      - SECRET_KEY=your_secret_key_here
+      - DEBUG=True
+      - ALLOWED_HOSTS=localhost,127.0.0.1,web,nginx
+      - DATABASE_URL=your_database_url_here
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_SSL=False
+      - AWS_ACCESS_KEY_ID=your_aws_access_key_id_here
+      - AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key_here
+      - AWS_STORAGE_BUCKET_NAME=your_bucket_name_here
+      - AWS_S3_REGION_NAME=your_region_here
+      - AWS_QUERYSTRING_AUTH=True
+      - DEEZER_BASE_URL=https://api.deezer.com
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  beat:
+    build:
+      context: .
+    command: celery -A PlayPod beat -l info
+    volumes:
+      - .:/app:cached
+    env_file: .env
+    environment:
+      - SECRET_KEY=your_secret_key_here
+      - DEBUG=True
+      - ALLOWED_HOSTS=localhost,127.0.0.1,web,nginx
+      - DATABASE_URL=your_database_url_here
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_SSL=False
+      - AWS_ACCESS_KEY_ID=your_aws_access_key_id_here
+      - AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key_here
+      - AWS_STORAGE_BUCKET_NAME=your_bucket_name_here
+      - AWS_S3_REGION_NAME=your_region_here
+      - AWS_QUERYSTRING_AUTH=True
+      - DEEZER_BASE_URL=https://api.deezer.com
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      - static_volume:/static
+      - media_volume:/media
+    depends_on:
+      - web
+
+volumes:
+  pgdata:
+  minio_data:
+  static_volume:
+  media_volume: 
