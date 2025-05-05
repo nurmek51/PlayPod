@@ -26,7 +26,19 @@ class DeezerClient:
         try:
             response = self.session.get(url, params=params, timeout=10)
             response.raise_for_status()
-            data = response.json()
+            
+            try:
+                data = response.json()
+            except ValueError as e:
+                logger.error(f"Invalid JSON response from Deezer API {url}: {str(e)}")
+                return None
+            
+            # Check for Deezer error response
+            if isinstance(data, dict) and data.get('error'):
+                error_msg = data.get('error', {}).get('message', 'Unknown Deezer API error')
+                error_code = data.get('error', {}).get('code', 0)
+                logger.error(f"Deezer API error for {url}: {error_code} - {error_msg}")
+                return None
             
             if isinstance(data, dict):
                 if 'data' in data:
@@ -34,7 +46,7 @@ class DeezerClient:
                 else:
                     logger.info(f"Received response from {url}: {list(data.keys())}")
             else:
-                logger.info(f"Received non-dictionary response from {url}")
+                logger.info(f"Received non-dictionary response from {url}: {type(data)}")
 
             if cache_key and data:
                 cache.set(cache_key, data, cache_time)
@@ -42,6 +54,9 @@ class DeezerClient:
             return data
         except requests.RequestException as e:
             logger.error(f"Deezer API error for {url}: {str(e)}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error accessing Deezer API {url}: {str(e)}")
             return None
 
     def search_artists(self, query, limit=20, offset=0):
@@ -75,14 +90,14 @@ class DeezerClient:
         params = {'limit': limit, 'index': offset}
         cache_key = f"deezer:artist_albums:{artist_id}:{limit}:{offset}"
         response = self._make_request(f"artist/{artist_id}/albums", params, cache_key)
-        return response.get('data', []) if response else []
+        return response.get('data', []) if isinstance(response, dict) else []
 
     def get_artist_top_tracks(self, artist_id, limit=20):
         """Get top tracks for a specific artist"""
         params = {'limit': limit}
         cache_key = f"deezer:artist_top:{artist_id}:{limit}"
         response = self._make_request(f"artist/{artist_id}/top", params, cache_key)
-        return response.get('data', []) if response else []
+        return response.get('data', []) if isinstance(response, dict) else []
 
     def get_album(self, album_id):
         """Get information about a specific album"""
@@ -95,9 +110,14 @@ class DeezerClient:
         response = self._make_request(f"album/{album_id}/tracks", cache_key=cache_key)
         return response.get('data', []) if response else []
 
-    def get_track(self, track_id):
+    def get_track(self, track_id, skip_cache=False):
         """Get information about a specific track"""
         cache_key = f"deezer:track:{track_id}"
+        
+        # Skip cache if requested
+        if skip_cache:
+            return self._make_request(f"track/{track_id}")
+            
         return self._make_request(f"track/{track_id}", cache_key=cache_key)
 
     def get_related_tracks(self, track_id, limit=10):
@@ -216,6 +236,15 @@ class DeezerClient:
         cache_key = f"deezer:new_releases:{limit}"
         response = self._make_request("editorial/0/releases", params, cache_key, cache_time=7200)
         return response.get('data', []) if response else []
+
+    def clear_cache_for_track(self, track_id):
+        """Clear cache for a specific track"""
+        cache_key = f"deezer:track:{track_id}"
+        cache.delete(cache_key)
+        
+        # Also clear related cache entries
+        cache.delete(f"deezer:track_related:{track_id}:10")
+        return True
 
 
 deezer_client = DeezerClient()
