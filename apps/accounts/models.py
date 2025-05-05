@@ -27,6 +27,7 @@ class Favorite(models.Model):
     artist_name = models.CharField(max_length=255)
     album_title = models.CharField(max_length=255, blank=True)
     album_cover = models.URLField(blank=True)
+    duration = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -46,6 +47,8 @@ class PlaybackHistory(models.Model):
     artist_name = models.CharField(max_length=255)
     album_title = models.CharField(max_length=255, blank=True)
     album_cover = models.URLField(blank=True)
+    genre_id = models.CharField(max_length=50, blank=True, null=True)
+    genre = models.CharField(max_length=100, blank=True)
     position = models.PositiveIntegerField(default=0)
     timestamp = models.DateTimeField(auto_now_add=True)
 
