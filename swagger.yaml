@@ -1,0 +1,1269 @@
+openapi: 3.0.3
+info:
+  title: PlayPod API
+  description: PlayPod is a music streaming platform inspired by Spotify, built with Django REST Framework and integrated with the Deezer API.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000/api
+    description: Development server
+  
+tags:
+  - name: Authentication
+    description: User authentication endpoints
+  - name: User
+    description: User profile and settings
+  - name: Playlists
+    description: Playlist management
+  - name: Queue
+    description: Music playback queue
+  - name: Catalogue
+    description: Music catalog and search
+  - name: Charts
+    description: Music charts and trends
+
+paths:
+  /accounts/register/:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user account
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - email
+                - password
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  username:
+                    type: string
+                  email:
+                    type: string
+                    format: email
+        '400':
+          description: Bad request
+
+  /accounts/token/:
+    post:
+      tags:
+        - Authentication
+      summary: Obtain JWT token
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  refresh:
+                    type: string
+                  access:
+                    type: string
+        '401':
+          description: Authentication failed
+
+  /accounts/token/refresh/:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh JWT token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh
+              properties:
+                refresh:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access:
+                    type: string
+        '401':
+          description: Invalid refresh token
+
+  /accounts/profile/:
+    get:
+      tags:
+        - User
+      summary: Get current user profile
+      operationId: getUserProfile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Unauthorized
+    patch:
+      tags:
+        - User
+      summary: Update user profile
+      operationId: updateUserProfile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bio:
+                  type: string
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+
+  /accounts/upload-avatar/:
+    post:
+      tags:
+        - User
+      summary: Upload user avatar
+      operationId: uploadAvatar
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Avatar uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  avatar_url:
+                    type: string
+                    format: uri
+        '400':
+          description: Invalid image
+        '401':
+          description: Unauthorized
+
+  /playlists/playlists/:
+    get:
+      tags:
+        - Playlists
+      summary: List playlists
+      operationId: listPlaylists
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: me
+          in: query
+          description: Filter to only show the user's playlists
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: List of playlists
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlaylistSummary'
+        '401':
+          description: Unauthorized
+    post:
+      tags:
+        - Playlists
+      summary: Create a new playlist
+      operationId: createPlaylist
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                is_public:
+                  type: boolean
+                  default: true
+      responses:
+        '201':
+          description: Playlist created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaylistSummary'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+
+  /playlists/playlists/{id}/:
+    get:
+      tags:
+        - Playlists
+      summary: Get playlist details
+      operationId: getPlaylist
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Playlist details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaylistDetail'
+        '404':
+          description: Playlist not found
+        '401':
+          description: Unauthorized
+    patch:
+      tags:
+        - Playlists
+      summary: Update playlist
+      operationId: updatePlaylist
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                is_public:
+                  type: boolean
+      responses:
+        '200':
+          description: Playlist updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaylistSummary'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '403':
+          description: Not playlist owner
+        '404':
+          description: Playlist not found
+    delete:
+      tags:
+        - Playlists
+      summary: Delete playlist
+      operationId: deletePlaylist
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Playlist deleted successfully
+        '401':
+          description: Unauthorized
+        '403':
+          description: Not playlist owner
+        '404':
+          description: Playlist not found
+
+  /playlists/playlists/{id}/tracks/:
+    get:
+      tags:
+        - Playlists
+      summary: List tracks in a playlist
+      operationId: listPlaylistTracks
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of tracks in the playlist
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlaylistTrack'
+        '401':
+          description: Unauthorized
+        '404':
+          description: Playlist not found
+
+  /playlists/playlists/{id}/add_track/:
+    post:
+      tags:
+        - Playlists
+      summary: Add a track to playlist
+      operationId: addTrackToPlaylist
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - track_id
+              properties:
+                track_id:
+                  type: integer
+      responses:
+        '201':
+          description: Track added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaylistTrack'
+        '400':
+          description: Bad request or track already in playlist
+        '401':
+          description: Unauthorized
+        '403':
+          description: Not playlist owner
+        '404':
+          description: Playlist or track not found
+
+  /playlists/playlists/{id}/add_tracks/:
+    post:
+      tags:
+        - Playlists
+      summary: Add multiple tracks to playlist
+      operationId: addTracksToPlaylist
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tracks
+              properties:
+                tracks:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        '201':
+          description: Tracks added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  added_count:
+                    type: integer
+                  total:
+                    type: integer
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '403':
+          description: Not playlist owner
+        '404':
+          description: Playlist not found
+
+  /playlists/playlists/{id}/remove_track/:
+    delete:
+      tags:
+        - Playlists
+      summary: Remove a track from playlist
+      operationId: removeTrackFromPlaylist
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: track_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Track removed successfully
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '403':
+          description: Not playlist owner
+        '404':
+          description: Playlist or track not found
+
+  /playlists/playlists/{id}/play/:
+    post:
+      tags:
+        - Playlists
+      summary: Play playlist
+      operationId: playPlaylist
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                position:
+                  type: integer
+                  default: 0
+                  description: Position to start playing from
+                shuffle:
+                  type: boolean
+                  default: false
+                  description: Whether to shuffle the playlist
+      responses:
+        '200':
+          description: Playlist queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Queue'
+        '400':
+          description: Playlist is empty
+        '401':
+          description: Unauthorized
+        '404':
+          description: Playlist not found
+
+  /playlists/recommendations/:
+    get:
+      tags:
+        - Playlists
+      summary: Get personalized track recommendations
+      operationId: getRecommendations
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of recommended tracks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Track'
+        '401':
+          description: Unauthorized
+
+  /playlists/play-recommendation/:
+    post:
+      tags:
+        - Playlists
+      summary: Play recommended track
+      operationId: playRecommendation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - track_id
+              properties:
+                track_id:
+                  type: string
+      responses:
+        '200':
+          description: Recommendation queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Queue'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '404':
+          description: Track not found
+
+  /playlists/generate/:
+    post:
+      tags:
+        - Playlists
+      summary: Generate playlist based on genre
+      operationId: generatePlaylist
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - genre
+              properties:
+                genre:
+                  type: string
+                genre_id:
+                  type: integer
+                name:
+                  type: string
+      responses:
+        '201':
+          description: Playlist generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaylistDetail'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '404':
+          description: No tracks found for genre
+
+  /playlists/queue/:
+    get:
+      tags:
+        - Queue
+      summary: Get current queue
+      operationId: getQueue
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current queue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Queue'
+        '401':
+          description: Unauthorized
+    patch:
+      tags:
+        - Queue
+      summary: Update queue
+      operationId: updateQueue
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                current_track_id:
+                  type: string
+                current_position:
+                  type: integer
+      responses:
+        '200':
+          description: Queue updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Queue'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+
+  /playlists/queue/tracks/:
+    get:
+      tags:
+        - Queue
+      summary: List tracks in queue
+      operationId: listQueueTracks
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of tracks in the queue
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueueTrack'
+        '401':
+          description: Unauthorized
+
+  /playlists/queue/enqueue/:
+    post:
+      tags:
+        - Queue
+      summary: Add track to queue
+      operationId: enqueueTrack
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - track_id
+              properties:
+                track_id:
+                  type: integer
+      responses:
+        '201':
+          description: Track added to queue successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueTrack'
+        '400':
+          description: Bad request or track already in queue
+        '401':
+          description: Unauthorized
+        '404':
+          description: Track not found
+
+  /playlists/queue/next/:
+    post:
+      tags:
+        - Queue
+      summary: Skip to next track
+      operationId: nextTrack
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Moved to next track successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueTrack'
+        '400':
+          description: No current track
+        '401':
+          description: Unauthorized
+        '404':
+          description: End of queue reached or current track not found
+
+  /playlists/queue/previous/:
+    post:
+      tags:
+        - Queue
+      summary: Go to previous track
+      operationId: previousTrack
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Moved to previous track successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueTrack'
+        '400':
+          description: No current track
+        '401':
+          description: Unauthorized
+        '404':
+          description: Current track not found
+
+  /playlists/queue/clear/:
+    post:
+      tags:
+        - Queue
+      summary: Clear queue
+      operationId: clearQueue
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Queue cleared successfully
+        '401':
+          description: Unauthorized
+
+  /playlists/queue/current/:
+    get:
+      tags:
+        - Queue
+      summary: Get current track
+      operationId: getCurrentTrack
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current track
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueTrack'
+        '401':
+          description: Unauthorized
+        '404':
+          description: No current track
+
+  /playlists/queue/position/:
+    post:
+      tags:
+        - Queue
+      summary: Jump to position in queue
+      operationId: jumpToPosition
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - position
+              properties:
+                position:
+                  type: integer
+      responses:
+        '200':
+          description: Jumped to position successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueTrack'
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '404':
+          description: Track at position not found
+
+  /playlists/queue/shuffle/:
+    post:
+      tags:
+        - Queue
+      summary: Shuffle queue
+      operationId: shuffleQueue
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Queue shuffled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Queue'
+        '400':
+          description: Queue is empty
+        '401':
+          description: Unauthorized
+
+  /playlists/queue/stream/:
+    post:
+      tags:
+        - Queue
+      summary: Stream track
+      operationId: streamTrack
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                track_id:
+                  type: string
+      responses:
+        '200':
+          description: Track streaming started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueTrack'
+        '400':
+          description: No current track
+        '401':
+          description: Unauthorized
+        '404':
+          description: Track not found
+
+  /playlists/queue/history/:
+    get:
+      tags:
+        - Queue
+      summary: Get playback history
+      operationId: getPlaybackHistory
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Playback history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlaybackHistory'
+        '401':
+          description: Unauthorized
+
+  /catalogue/search/:
+    get:
+      tags:
+        - Catalogue
+      summary: Search for tracks, artists, and albums
+      operationId: search
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tracks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Track'
+                  artists:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Artist'
+                  albums:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Album'
+        '401':
+          description: Unauthorized
+
+  /catalogue/track/{id}/:
+    get:
+      tags:
+        - Catalogue
+      summary: Get track details
+      operationId: getTrack
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Track details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Track'
+        '401':
+          description: Unauthorized
+        '404':
+          description: Track not found
+
+  /catalogue/stream/{id}/:
+    get:
+      tags:
+        - Catalogue
+      summary: Get track streaming URL
+      operationId: getStreamUrl
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Streaming URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stream_url:
+                    type: string
+                    format: uri
+        '401':
+          description: Unauthorized
+        '404':
+          description: Track not found
+
+  /charts/top/:
+    get:
+      tags:
+        - Charts
+      summary: Get top charts
+      operationId: getTopCharts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Top tracks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Track'
+        '401':
+          description: Unauthorized
+
+  /charts/genre/{genre}/:
+    get:
+      tags:
+        - Charts
+      summary: Get genre charts
+      operationId: getGenreCharts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: genre
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Genre top tracks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Track'
+        '401':
+          description: Unauthorized
+        '404':
+          description: Genre not found
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        bio:
+          type: string
+        avatar:
+          type: string
+          format: uri
+
+    PlaylistSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        cover_image:
+          type: string
+          format: uri
+        is_public:
+          type: boolean
+        track_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PlaylistDetail:
+      allOf:
+        - $ref: '#/components/schemas/PlaylistSummary'
+        - type: object
+          properties:
+            tracks:
+              type: array
+              items:
+                $ref: '#/components/schemas/PlaylistTrack'
+
+    PlaylistTrack:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        track_id:
+          type: string
+        artist_id:
+          type: string
+        track_title:
+          type: string
+        artist_name:
+          type: string
+        album_title:
+          type: string
+        album_cover:
+          type: string
+          format: uri
+        duration:
+          type: integer
+        position:
+          type: integer
+        added_at:
+          type: string
+          format: date-time
+
+    Queue:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        current_track_id:
+          type: string
+        current_position:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+        tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueueTrack'
+
+    QueueTrack:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        track_id:
+          type: string
+        artist_id:
+          type: string
+        track_title:
+          type: string
+        artist_name:
+          type: string
+        album_title:
+          type: string
+        album_cover:
+          type: string
+          format: uri
+        duration:
+          type: integer
+        position:
+          type: integer
+        added_at:
+          type: string
+          format: date-time
+
+    Track:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        artist:
+          $ref: '#/components/schemas/Artist'
+        album:
+          $ref: '#/components/schemas/Album'
+        duration:
+          type: integer
+
+    Artist:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+
+    Album:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        cover:
+          type: string
+          format: uri
+
+    PlaybackHistory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        track_id:
+          type: string
+        artist_id:
+          type: string
+        track_title:
+          type: string
+        artist_name:
+          type: string
+        album_title:
+          type: string
+        album_cover:
+          type: string
+          format: uri
+        timestamp:
+          type: string
+          format: date-time 
