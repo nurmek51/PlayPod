@@ -23,15 +23,18 @@ INSTALLED_APPS = [
     "corsheaders",
     "django_filters",
     "storages",
+    "drf_yasg",
     "apps.core",
     "apps.accounts",
     "apps.catalogue",
     "apps.playlists",
     "apps.deezer",
+    "apps.charts",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -61,7 +64,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "PlayPod.wsgi.application"
 
-DATABASES = {"default": dj_database_url.config(default=os.getenv("DATABASE_URL"))}
+DATABASES = {"default": dj_database_url.config(default=os.getenv("DATABASE_URL"), conn_max_age=600)}
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -75,8 +78,11 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+WHITENOISE_USE_FINDERS = True
+
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
@@ -96,7 +102,7 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(days=3),
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
@@ -108,31 +114,92 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = ["http://localhost:3000", "http://localhost:5173"]
 CORS_ALLOW_CREDENTIALS = True
 
+REDIS_HOST = os.getenv("REDIS_HOST")
+REDIS_PORT = 6379
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+REDIS_SSL = os.getenv("REDIS_SSL", "True") == "True"
+
+REDIS_URL = f"{'rediss' if REDIS_SSL else 'redis'}://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0"
+
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": os.getenv("CELERY_BROKER_URL"),
-        "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
+        "LOCATION": REDIS_URL,
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "CONNECTION_POOL_KWARGS": {"ssl_cert_reqs": None} if REDIS_SSL else {},
+            "SOCKET_CONNECT_TIMEOUT": 5,
+            "SOCKET_TIMEOUT": 5,
+        },
+        "KEY_PREFIX": "playpod"
     }
 }
 
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL")
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND")
+# Cache timeout settings
+CACHE_TTL = 60 * 15
+CACHE_TTL_SHORT = 60 * 5
+CACHE_TTL_LONG = 60 * 60 * 24
+
+# Cache specific views - 10 minutes
+CACHE_MIDDLEWARE_SECONDS = 60 * 10
+
+# Use Redis for session cache
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
+
+# Celery configuration
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TIME_LIMIT = 30 * 60
+CELERY_TASK_SOFT_TIME_LIMIT = 15 * 60
+CELERY_TASK_ALWAYS_EAGER = DEBUG
+CELERY_TASK_EAGER_PROPAGATES = DEBUG
 
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
-AWS_S3_ENDPOINT_URL = os.getenv("AWS_S3_ENDPOINT_URL")
-AWS_S3_ADDRESSING_STYLE = os.getenv("AWS_S3_ADDRESSING_STYLE")
-AWS_QUERYSTRING_AUTH = os.getenv("AWS_QUERYSTRING_AUTH") == "True"
+AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME")
+AWS_QUERYSTRING_AUTH = os.getenv("AWS_QUERYSTRING_AUTH", "True") == "True"
+AWS_DEFAULT_ACL = "public-read"
+AWS_S3_CUSTOM_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com"
 DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/"
 
-# add DEEZER settings if needed
-DEEZER_BASE_URL = 'https://api.deezer.com'
+DEEZER_BASE_URL = os.getenv("DEEZER_BASE_URL", "https://api.deezer.com")
 
-# allow streaming proxy
 USE_DIRECT_AUDIO_REDIRECT = False
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+}
+
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header'
+        }
+    },
+    'USE_SESSION_AUTH': False,
+    'PERSIST_AUTH': True,
+    'DEFAULT_MODEL_RENDERING': 'example'
+}
+
+REDOC_SETTINGS = {
+    'LAZY_RENDERING': True,
+}
